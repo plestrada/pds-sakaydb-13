@@ -83,10 +83,6 @@ class SakayDB():
                 'last_name': [last_name]
             }
             pd.DataFrame(data).to_csv(fn, mode='a', index=False, header=False)
-            print('driver added')
-            return
-        else:
-            print('driver already in db')
 
     def add_trip(self, driver, pickup_datetime, dropoff_datetime, passenger_count,
                  pickup_loc_name, dropoff_loc_name, trip_distance, fare_amount):
@@ -138,12 +134,35 @@ class SakayDB():
 
             pd.DataFrame(trip_data).to_csv(fn, encoding='utf-8',
                                            mode='a', index=False, header=False)
-            print('trip added')
             return trip_id
         else:
-            print('trip already in db')
             raise SakayDBError('Trip exists in the database')
 
+    # Pat - add_trips
+    def add_trips(self, trips_list):
+        trip_ids = []
+        for i, row in enumerate(trips_list):
+            try:
+                driver = row['driver']
+                pickup_datetime = row['pickup_datetime']
+                dropoff_datetime = row['dropoff_datetime']
+                passenger_count = row['passenger_count']
+                pickup_loc_name = row['pickup_loc_name']
+                dropoff_loc_name = row['dropoff_loc_name']
+                trip_distance = row['trip_distance']
+                fare_amount = row['fare_amount']
+                
+                try:
+                    trip_id = self.add_trip(driver, pickup_datetime, dropoff_datetime, passenger_count,
+                                  pickup_loc_name, dropoff_loc_name, trip_distance, fare_amount)
+                    trip_ids.append(trip_id)
+                except:
+                    print(f'Warning: trip index {i} is already in the database. Skipping...')    
+            
+            except:
+                print(f'Warning: trip index {i} has invalid or incomplete information. Skipping...')
+        
+        return trip_ids
 
 class SakayDBError(ValueError):
     def __init__(self, exception):
