@@ -1,5 +1,8 @@
 import numpy as np
 import pandas as pd
+import numpy as np
+import os.path
+from pathlib import Path
 import matplotlib.pyplot as plt
 
 
@@ -7,15 +10,86 @@ class SakayDB():
     def __init__(self, data_dir):
         self.data_dir = data_dir
 
-    def add_trip(self,
-                 driver,
-                 pickup_datetime,
-                 dropoff_datetime,
-                 passenger_count,
-                 pickup_loc_name,
-                 dropoff_loc_name,
-                 trip_distance,
-                 fare_amount):
+    # BJ - add_trip
+    def check_create_file(self, filename, columns):
+        if not os.path.exists(filename):
+            with open(filename, mode='w', encoding='utf-8') as f:
+                f.write(','.join(columns) + '\n')
+
+    def get_driver_id(self, driver):
+        last_name, given_name = [x.strip() for x in driver.split(',')]
+
+        fn = f'{self.data_dir}/drivers.csv'
+        df_drivers = pd.read_csv(fn)
+        cond = ((df_drivers['given_name'].str.lower() == given_name.lower()) &
+                (df_drivers['last_name'].str.lower() == last_name.lower()))
+
+        if cond.any():
+            driver_id = df_drivers[cond]['driver_id'].item()
+            return driver_id
+        else:
+            return None
+
+    def get_loc_id(self, location):
+        fn = f'{self.data_dir}/locations.csv'
+        df_locations = pd.read_csv(fn)
+        cond = (df_locations['loc_name'].str.lower()
+                == location.lower().strip())
+
+        if cond.any():
+            loc_id = df_locations[cond]['location_id'].item()
+            return loc_id
+        else:
+            return None
+
+    def get_trip_id(self, driver, pickup_datetime, dropoff_datetime, passenger_count,
+                    pickup_loc_name, dropoff_loc_name, trip_distance, fare_amount):
+        fn = f'{self.data_dir}/trips.csv'
+        df_trips = pd.read_csv(fn)
+        cond = ((df_trips['driver_id'] == self.get_driver_id(driver)) &
+                (df_trips['pickup_datetime'] == pickup_datetime) &
+                (df_trips['dropoff_datetime'] == dropoff_datetime) &
+                (df_trips['passenger_count'] == passenger_count) &
+                (df_trips['pickup_loc_id'] == self.get_loc_id(pickup_loc_name)) &
+                (df_trips['dropoff_loc_id'] == self.get_loc_id(dropoff_loc_name)) &
+                (df_trips['trip_distance'] == trip_distance) &
+                (df_trips['fare_amount'] == fare_amount))
+
+        if cond.any():
+            trip_id = df_trips[cond]['trip_id'].item()
+            return trip_id
+        else:
+            return None
+
+    def add_driver(self, driver):
+        last_name, given_name = [x.strip() for x in driver.split(',')]
+
+        fn = f'{self.data_dir}/drivers.csv'
+        cols = ['driver_id', 'given_name', 'last_name']
+
+        self.check_create_file(fn, cols)
+
+        df_drivers = pd.read_csv(fn)
+
+        if pd.isnull(df_drivers['driver_id'].max()):
+            driver_id = 1
+        else:
+            driver_id = df_drivers['driver_id'].max() + 1
+
+        if self.get_driver_id(driver) is None:
+            data = {
+                'driver_id': [driver_id],
+                'given_name': [given_name],
+                'last_name': [last_name]
+            }
+            pd.DataFrame(data).to_csv(fn, mode='a', index=False, header=False)
+            print('driver added')
+            return
+        else:
+            print('driver already in db')
+
+    def add_trip(self, driver, pickup_datetime, dropoff_datetime, passenger_count,
+                 pickup_loc_name, dropoff_loc_name, trip_distance, fare_amount):
 
         try:
             drv_check = driver.split(',')
@@ -25,79 +99,50 @@ class SakayDB():
             fare_amount = float(fare_amount)
 
         except:
-            raise SakayDBError('There is a wrong input format.')
+            raise SakayDBError('Wrong input format.')
 
         if isinstance(pickup_loc_name, str) and isinstance(dropoff_loc_name, str) and isinstance(passenger_count, int):
             pass
         else:
-            raise SakayDBError('There is a wrong input format.')
+            raise SakayDBError('Wrong input format.')
 
-        try:
-            drivers = pd.read_csv(f'{self.data_dir}/drivers.csv')
-        except:
-            drivers = pd.DataFrame({'driver_id': [np.nan], 'last_name': [np.nan],
-                                    'given_name': [np.nan]})
+        fn = f'{self.data_dir}/trips.csv'
+        cols = ['trip_id', 'driver_id', 'pickup_datetime',
+                'dropoff_datetime', 'passenger_count', 'pickup_loc_id',
+                'dropoff_loc_id', 'trip_distance', 'fare_amount']
 
-        driver = [x.strip() for x in driver.split(',')]
-        driver_id = drivers[(drivers['last_name'].apply(lambda x: str(x).lower()) == driver[0].lower()) &
-                            (drivers['given_name'].apply(lambda x: str(x).lower()) == driver[1].lower())]
+        self.check_create_file(fn, cols)
 
-        if len(driver_id) != 0:
-            driver_id = drivers['driver_id'].iloc[0]
-        else:
-            driver_id = drivers['driver_id'].max(
-            ) + 1 if str(drivers['driver_id'].max()) != 'nan' else 1
-            new_driver = pd.DataFrame({'driver_id': [driver_id], 'last_name': [driver[0]],
-                                       'given_name': [driver[1]]})
-            drivers = pd.concat([drivers, new_driver], axis=0)
-            drivers.dropna(how='all', axis=0, inplace=True)
-            drivers.to_csv(f'{self.data_dir}/drivers.csv', index=False)
+        df_trips = pd.read_csv(fn)
 
-        locations = pd.read_csv(f'{self.data_dir}/locations.csv')
-        pickup_loc_id = locations.loc[(locations['loc_name'] == pickup_loc_name), 'location_id'].iloc[0]
-        dropoff_loc_id = locations.loc[(locations['loc_name'] == dropoff_loc_name), 'location_id'].iloc[0]
+        self.add_driver(driver)
 
-        try:
-            trips = pd.read_csv(f'{self.data_dir}/trips.csv')
-            trip_id = trips['trip_id'].max() + 1
-
-        except:
-            trips = pd.DataFrame({'trip_id': np.nan,
-                                  'driver_id': np.nan,
-                                  'pickup_datetime': np.nan,
-                                  'dropoff_datetime': np.nan,
-                                  'passenger_count': np.nan,
-                                  'pickup_loc_id': np.nan,
-                                  'dropoff_loc_id': np.nan,
-                                  'trip_distance': np.nan,
-                                  'fare_amount': np.nan}, index=[0])
-
+        if pd.isnull(df_trips['trip_id'].max()):
             trip_id = 1
+        else:
+            trip_id = df_trips['trip_id'].max() + 1
 
-        new_trip = pd.DataFrame({'trip_id': trip_id,
-                                 'driver_id': driver_id,
-                                 'pickup_datetime': pickup_datetime,
-                                 'dropoff_datetime': dropoff_datetime,
-                                 'passenger_count': passenger_count,
-                                 'pickup_loc_id': pickup_loc_id,
-                                 'dropoff_loc_id': dropoff_loc_id,
-                                 'trip_distance': trip_distance,
-                                 'fare_amount': fare_amount}, index=[0])
+        if self.get_trip_id(driver, pickup_datetime, dropoff_datetime, passenger_count,
+                            pickup_loc_name, dropoff_loc_name, trip_distance, fare_amount) is None:
+            trip_data = {
+                'trip_id': [trip_id],
+                'driver_id': [self.get_driver_id(driver)],
+                'pickup_datetime': pickup_datetime,
+                'dropoff_datetime': dropoff_datetime,
+                'passenger_count': [passenger_count],
+                'pickup_loc_id': [self.get_loc_id(pickup_loc_name)],
+                'dropoff_loc_id': [self.get_loc_id(dropoff_loc_name)],
+                'trip_distance': [trip_distance],
+                'fare_amount': [fare_amount]
+            }
 
-        sub_set = ['driver_id', 'pickup_datetime', 'dropoff_datetime', 'passenger_count',
-                   'pickup_loc_id', 'dropoff_loc_id', 'trip_distance', 'fare_amount']
-
-        trips = pd.concat([trips, new_trip]).reset_index(drop=True)
-        trips.dropna(how='all', axis=0, inplace=True)
-
-        dupe_check = trips[trips.duplicated(subset=sub_set, keep=False)]
-        dupe_check = dupe_check.query(f'trip_id=={trip_id}')
-
-        if len(dupe_check) == 0:
-            trips.to_csv(f'{self.data_dir}/trips.csv', index=False)
+            pd.DataFrame(trip_data).to_csv(fn, encoding='utf-8',
+                                           mode='a', index=False, header=False)
+            print('trip added')
             return trip_id
         else:
-            raise SakayDBError('Trip already exists.')
+            print('trip already in db')
+            raise SakayDBError('Trip exists in the database')
 
 
 class SakayDBError(ValueError):
