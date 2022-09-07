@@ -163,7 +163,76 @@ class SakayDB():
                 print(f'Warning: trip index {i} has invalid or incomplete information. Skipping...')
         
         return trip_ids
+    
+    # Pat/Gerard - delete_trip
+    def delete_trip(self, tr_id):
+        try:
+            fn = f'{self.data_dir}/trips.csv'
+            df_trips = pd.read_csv(fn)
+        except Exception as e:
+            raise SakayDBError(f'{e}')
 
+        tr_id_check = df_trips.loc[df_trips['trip_id'] == tr_id, :]
+
+        if len(tr_id_check) == 0:
+            raise SakayDBError(f'trip_id cannot be found')
+        else:
+            df_trips = df_trips.loc[df_trips['trip_id'] != tr_id, :]
+            df_trips.to_csv(fn, encoding='utf-8', index=False)
+
+    # MG - export_data
+    def export_data(self):
+        dr_fn = f'{self.data_dir}/drivers.csv'
+        loc_fn = f'{self.data_dir}/locations.csv'
+        tr_fn = f'{self.data_dir}/trips.csv'
+
+        dr_cols = ['driver_id', 'given_name', 'last_name']
+        loc_cols = ['location_id', 'loc_name']
+        tr_cols = ['trip_id', 'driver_id', 'pickup_datetime',
+                   'dropoff_datetime', 'passenger_count', 'pickup_loc_id',
+                   'dropoff_loc_id', 'trip_distance', 'fare_amount']
+
+        self.check_create_file(dr_fn, dr_cols)
+        self.check_create_file(loc_fn, loc_cols)
+        self.check_create_file(tr_fn, tr_cols)
+
+        drivers = pd.read_csv(dr_fn)
+        locations = pd.read_csv(loc_fn)
+        trips = pd.read_csv(tr_fn)
+
+        drivers['last_name'] = drivers['last_name'].str.capitalize()
+        drivers['given_name'] = drivers['given_name'].str.capitalize()
+
+        trips = trips.merge(locations, left_on='pickup_loc_id',
+                                        right_on='location_id', how="left")
+        
+        trips.rename(columns={'loc_name': 'pickup_loc_name'}, inplace=True)
+
+        trips = trips.merge(locations, left_on='dropoff_loc_id',
+                                        right_on='location_id', how="left")
+        
+        trips.rename(columns={'loc_name': 'dropoff_loc_name'}, inplace=True)
+
+        merged_df = trips.merge(drivers, left_on='driver_id',
+                                        right_on='driver_id', how="outer")
+        
+        merged_df = merged_df.sort_values(by='trip_id')
+        merged_df.rename(columns={'given_name': 'driver_givenname',
+                                  'last_name': 'driver_lastname'}, inplace=True)
+
+        merged_df['passenger_count'] = merged_df['passenger_count'].astype('int64')
+        merged_df['trip_distance'] = merged_df['trip_distance'].astype('float64')
+        merged_df['fare_amount'] = merged_df['fare_amount'].astype('float64')
+
+        merged_df = merged_df.sort_values(by='trip_id', ascending=True)
+
+        df_export = merged_df[['driver_lastname', 'driver_givenname', 'pickup_datetime',
+                               'dropoff_datetime', 'passenger_count', 'pickup_loc_name',
+                               'dropoff_loc_name', 'trip_distance', 'fare_amount']].copy()
+
+        return df_export
+
+    
 class SakayDBError(ValueError):
     def __init__(self, exception):
         super().__init__(exception)
