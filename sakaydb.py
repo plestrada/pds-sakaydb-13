@@ -232,7 +232,80 @@ class SakayDB():
 
         return df_export
 
-    
+    # Pat/Ian - generate_statistics    
+    def stat_trips(self, df_trips):
+        df_trips['pickup_datetime'] = pd.to_datetime(
+            df_trips['pickup_datetime'], format='%H:%M:%S,%d-%m-%Y')
+        df_trips['pickup_date'] = df_trips['pickup_datetime']\
+                                                    .dt.strftime('%Y-%m-%d')
+        df_trips['day_of_week'] = df_trips['pickup_datetime'].dt.day_name()
+        daily_trips = df_trips.groupby(['pickup_date'], as_index=False)\
+                            .agg({'trip_id': 'count', 'day_of_week': 'first'})
+        per_day_df = daily_trips.groupby('day_of_week', as_index=False).mean()
+        per_day_df['day_of_week'] = pd.Categorical(values=per_day_df['day_of_week'],
+                    categories=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
+        per_day_df.set_index('day_of_week',  inplace=True)
+        per_day_df = per_day_df.sort_values(by='day_of_week', ascending=True)
+        per_day_dict = per_day_df.to_dict()
+        return per_day_dict['trip_id']
+
+
+    def stat_passenger(self, df_trips):
+        pass_dict = dict()
+        for val in df_trips['passenger_count'].unique():
+            df_trips_loop = df_trips[df_trips['passenger_count'] == val].copy()
+            pass_val = self.stat_trips(df_trips_loop)
+            pass_dict[val] = pass_val
+        return pass_dict
+
+
+    def stat_driver(self, df_trips):
+        fn = f'{self.data_dir}/drivers.csv'
+        cols = ['driver_id', 'given_name', 'last_name']
+        
+        self.check_create_file(fn, cols)
+        df_driver = pd.read_csv(fn)
+        
+        df_driver['driver_name'] = df_driver['last_name'] + ', ' + df_driver['given_name']
+        df_driver = df_driver[['driver_id', 'driver_name']]
+
+        df_trips = df_trips.merge(df_driver, on='driver_id', how='left')
+        drv_dict = dict()
+        for name in df_trips['driver_name'].unique():
+            df_trips_loop = df_trips[df_trips['driver_name'] == name].copy()
+            drv_val = self.stat_trips(df_trips_loop)
+            drv_dict[name] = drv_val
+        return drv_dict
+
+
+    def generate_statistics(self, stat):
+        fn = f'{self.data_dir}/trips.csv' 
+        cols = ['trip_id', 'driver_id', 'pickup_datetime',
+                'dropoff_datetime', 'passenger_count', 'pickup_loc_id',
+                'dropoff_loc_id', 'trip_distance', 'fare_amount']
+
+        self.check_create_file(fn, cols)
+        df_trips = pd.read_csv(fn)
+        
+        stats_list = ['trip', 'passenger', 'driver', 'all']
+
+        if stat not in stats_list:
+            raise SakayDBError('Unknown stat input')
+        else:
+            if stat == 'trip':
+                return self.stat_trips(df_trips)
+            elif stat == 'passenger':
+                return self.stat_passenger(df_trips)
+            elif stat == 'driver':
+                return self.stat_driver(df_trips)
+            elif stat == 'all':
+                all_dict = dict()
+                all_dict['trip'] = self.stat_trips(df_trips)
+                all_dict['passenger'] = self.stat_passenger(df_trips)
+                all_dict['driver'] = self.stat_driver(df_trips)
+                return all_dict
+
+            
 class SakayDBError(ValueError):
     def __init__(self, exception):
         super().__init__(exception)
