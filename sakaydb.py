@@ -42,8 +42,14 @@ class SakayDB():
         else:
             return None
 
-    def get_trip_id(self, driver, pickup_datetime, dropoff_datetime, passenger_count,
-                    pickup_loc_name, dropoff_loc_name, trip_distance, fare_amount):
+    def get_trip_id(self, driver,
+                    pickup_datetime,
+                    dropoff_datetime,
+                    passenger_count,
+                    pickup_loc_name,
+                    dropoff_loc_name,
+                    trip_distance,
+                    fare_amount):
         fn = f'{self.data_dir}/trips.csv'
         df_trips = pd.read_csv(fn)
         cond = ((df_trips['driver_id'] == self.get_driver_id(driver)) &
@@ -84,18 +90,26 @@ class SakayDB():
             }
             pd.DataFrame(data).to_csv(fn, mode='a', index=False, header=False)
 
-    def add_trip(self, driver, pickup_datetime, dropoff_datetime, passenger_count,
-                 pickup_loc_name, dropoff_loc_name, trip_distance, fare_amount):
+    def add_trip(self, driver,
+                 pickup_datetime,
+                 dropoff_datetime,
+                 passenger_count,
+                 pickup_loc_name,
+                 dropoff_loc_name,
+                 trip_distance,
+                 fare_amount):
 
         try:
             drv_check = driver.split(',')
-            p_datetime = pd.to_datetime(pickup_datetime, format='%H:%M:%S,%d-%m-%Y')
-            d_datetime = pd.to_datetime(dropoff_datetime, format='%H:%M:%S,%d-%m-%Y')
+            p_datetime = pd.to_datetime(
+                pickup_datetime, format='%H:%M:%S,%d-%m-%Y')
+            d_datetime = pd.to_datetime(
+                dropoff_datetime, format='%H:%M:%S,%d-%m-%Y')
             trip_distance = float(trip_distance)
             fare_amount = float(fare_amount)
 
-        except:
-            raise SakayDBError('Wrong input format.')
+        except Exception as e:
+            raise SakayDBError(f'Wrong input format: {e}')
 
         if isinstance(pickup_loc_name, str) and isinstance(dropoff_loc_name, str) and isinstance(passenger_count, int):
             pass
@@ -151,19 +165,23 @@ class SakayDB():
                 dropoff_loc_name = row['dropoff_loc_name']
                 trip_distance = row['trip_distance']
                 fare_amount = row['fare_amount']
-                
+
                 try:
                     trip_id = self.add_trip(driver, pickup_datetime, dropoff_datetime, passenger_count,
-                                  pickup_loc_name, dropoff_loc_name, trip_distance, fare_amount)
+                                            pickup_loc_name, dropoff_loc_name, trip_distance, fare_amount)
                     trip_ids.append(trip_id)
                 except:
-                    print(f'Warning: trip index {i} is already in the database. Skipping...')    
-            
+                    print(
+                        f'Warning: trip index {i} is already in the database. Skipping...'
+                    )
+
             except:
-                print(f'Warning: trip index {i} has invalid or incomplete information. Skipping...')
-        
+                print(
+                    f'Warning: trip index {i} has invalid or incomplete information. Skipping...'
+                )
+
         return trip_ids
-    
+
     # Pat/Gerard - delete_trip
     def delete_trip(self, tr_id):
         try:
@@ -204,27 +222,30 @@ class SakayDB():
         drivers['given_name'] = drivers['given_name'].str.capitalize()
 
         trips = trips.merge(locations, left_on='pickup_loc_id',
-                                        right_on='location_id', how="left")
-        
+                            right_on='location_id', how="left")
+
         trips.rename(columns={'loc_name': 'pickup_loc_name'}, inplace=True)
 
         trips = trips.merge(locations, left_on='dropoff_loc_id',
-                                        right_on='location_id', how="left")
-        
+                            right_on='location_id', how="left")
+
         trips.rename(columns={'loc_name': 'dropoff_loc_name'}, inplace=True)
 
         merged_df = trips.merge(drivers, left_on='driver_id',
-                                        right_on='driver_id', how="outer")
-        
+                                right_on='driver_id', how="outer")
+
         merged_df = merged_df.sort_values(by='trip_id')
         merged_df.rename(columns={'given_name': 'driver_givenname',
                                   'last_name': 'driver_lastname'}, inplace=True)
 
-        merged_df['passenger_count'] = merged_df['passenger_count'].astype('int64')
-        merged_df['trip_distance'] = merged_df['trip_distance'].astype('float64')
+        merged_df['passenger_count'] = merged_df['passenger_count'].astype(
+            'int64')
+        merged_df['trip_distance'] = merged_df['trip_distance'].astype(
+            'float64')
         merged_df['fare_amount'] = merged_df['fare_amount'].astype('float64')
 
-        merged_df = merged_df.sort_values(by='trip_id', ascending=True)
+        merged_df = merged_df.sort_values(by='trip_id',
+                                          ascending=True)
 
         df_export = merged_df[['driver_lastname', 'driver_givenname', 'pickup_datetime',
                                'dropoff_datetime', 'passenger_count', 'pickup_loc_name',
@@ -232,23 +253,28 @@ class SakayDB():
 
         return df_export
 
-    # Pat/Ian - generate_statistics    
+    # Pat/Ian - generate_statistics
     def stat_trips(self, df_trips):
-        df_trips['pickup_datetime'] = pd.to_datetime(
-            df_trips['pickup_datetime'], format='%H:%M:%S,%d-%m-%Y')
+        df_trips['pickup_datetime'] = pd.to_datetime(df_trips['pickup_datetime'],
+                                                     format='%H:%M:%S,%d-%m-%Y')
+
         df_trips['pickup_date'] = df_trips['pickup_datetime']\
-                                                    .dt.strftime('%Y-%m-%d')
+            .dt.strftime('%Y-%m-%d')
+
         df_trips['day_of_week'] = df_trips['pickup_datetime'].dt.day_name()
         daily_trips = df_trips.groupby(['pickup_date'], as_index=False)\
-                            .agg({'trip_id': 'count', 'day_of_week': 'first'})
+            .agg({'trip_id': 'count', 'day_of_week': 'first'})
+
         per_day_df = daily_trips.groupby('day_of_week', as_index=False).mean()
-        per_day_df['day_of_week'] = pd.Categorical(values=per_day_df['day_of_week'],
-                    categories=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
+        per_day_df['day_of_week'] = pd.Categorical(
+            values=per_day_df['day_of_week'],
+            categories=['Monday', 'Tuesday', 'Wednesday',
+                        'Thursday', 'Friday', 'Saturday', 'Sunday'])
+
         per_day_df.set_index('day_of_week',  inplace=True)
         per_day_df = per_day_df.sort_values(by='day_of_week', ascending=True)
         per_day_dict = per_day_df.to_dict()
         return per_day_dict['trip_id']
-
 
     def stat_passenger(self, df_trips):
         pass_dict = dict()
@@ -258,15 +284,15 @@ class SakayDB():
             pass_dict[val] = pass_val
         return pass_dict
 
-
     def stat_driver(self, df_trips):
         fn = f'{self.data_dir}/drivers.csv'
         cols = ['driver_id', 'given_name', 'last_name']
-        
+
         self.check_create_file(fn, cols)
         df_driver = pd.read_csv(fn)
-        
-        df_driver['driver_name'] = df_driver['last_name'] + ', ' + df_driver['given_name']
+
+        df_driver['driver_name'] = df_driver['last_name'] + \
+            ', ' + df_driver['given_name']
         df_driver = df_driver[['driver_id', 'driver_name']]
 
         df_trips = df_trips.merge(df_driver, on='driver_id', how='left')
@@ -277,16 +303,15 @@ class SakayDB():
             drv_dict[name] = drv_val
         return drv_dict
 
-
     def generate_statistics(self, stat):
-        fn = f'{self.data_dir}/trips.csv' 
+        fn = f'{self.data_dir}/trips.csv'
         cols = ['trip_id', 'driver_id', 'pickup_datetime',
                 'dropoff_datetime', 'passenger_count', 'pickup_loc_id',
                 'dropoff_loc_id', 'trip_distance', 'fare_amount']
 
         self.check_create_file(fn, cols)
         df_trips = pd.read_csv(fn)
-        
+
         stats_list = ['trip', 'passenger', 'driver', 'all']
 
         if stat not in stats_list:
@@ -305,7 +330,78 @@ class SakayDB():
                 all_dict['driver'] = self.stat_driver(df_trips)
                 return all_dict
 
-            
+    # BJ - generate_odmatrix
+    def generate_odmatrix(self, date_range=None):
+        loc_fn = f'{self.data_dir}/locations.csv'
+        tr_fn = f'{self.data_dir}/trips.csv'
+
+        loc_cols = ['location_id', 'loc_name']
+        tr_cols = ['trip_id', 'driver_id', 'pickup_datetime',
+                   'dropoff_datetime', 'passenger_count', 'pickup_loc_id',
+                   'dropoff_loc_id', 'trip_distance', 'fare_amount']
+
+        self.check_create_file(loc_fn, loc_cols)
+        self.check_create_file(tr_fn, tr_cols)
+
+        locations = pd.read_csv(loc_fn)
+        trips = pd.read_csv(tr_fn)
+
+        trips['pickup_datetime'] = pd.to_datetime(
+            trips['pickup_datetime'], format='%H:%M:%S,%d-%m-%Y')
+        trips['count'] = 1
+
+        try:
+            if len(date_range) > 2:
+                raise SakayDBError('Invalid date_range input')
+        except Exception:
+            pass
+
+        if date_range is None:
+            trips = trips.copy()
+
+        elif date_range[1] is None:
+            date_range = [pd.to_datetime(
+                x, format='%H:%M:%S,%d-%m-%Y') for x in date_range]
+            trips = trips[trips['pickup_datetime'] >= date_range[0]]
+
+        elif date_range[0] is None:
+            date_range = [pd.to_datetime(
+                x, format='%H:%M:%S,%d-%m-%Y') for x in date_range]
+            trips = trips[trips['pickup_datetime'] <= date_range[1]]
+
+        elif date_range[0] is not None and date_range[1] is not None:
+            date_range = [pd.to_datetime(
+                x, format='%H:%M:%S,%d-%m-%Y') for x in date_range]
+            trips = trips[(trips['pickup_datetime'] > date_range[0]) &
+                          (trips['pickup_datetime'] <= date_range[1])]
+
+        trips = trips.merge(locations, left_on='pickup_loc_id',
+                            right_on='location_id', how='left')\
+            .rename(columns={'loc_name': 'pickup_loc_name'})
+
+        trips = trips.merge(locations, left_on='dropoff_loc_id',
+                            right_on='location_id', how='left')\
+            .rename(columns={'loc_name': 'dropoff_loc_name'})
+
+        trips = trips.drop(columns=['location_id_x', 'location_id_y',
+                                    'pickup_loc_id', 'dropoff_loc_id'])
+
+        trips = trips[['count', 'pickup_loc_name',
+                       'dropoff_loc_name', 'pickup_datetime']].copy()
+
+        trips['pickup_date'] = trips['pickup_datetime'].dt.strftime('%Y-%m-%d')
+        trips.drop(columns='pickup_datetime', inplace=True)
+
+        od_matrix = trips.groupby(['pickup_loc_name', 'dropoff_loc_name', 'pickup_date'],
+                                  as_index=False).sum()
+
+        od_matrix = od_matrix.pivot_table(columns='pickup_loc_name',
+                                          index='dropoff_loc_name', aggfunc='mean', fill_value=0)
+
+        od_matrix.columns = [x[1] for x in od_matrix.columns]
+        return od_matrix
+
+
 class SakayDBError(ValueError):
     def __init__(self, exception):
         super().__init__(exception)
